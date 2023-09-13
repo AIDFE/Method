@@ -170,6 +170,20 @@ def scale_cam_image(cam, target_size=None):
     return result
 
 
+def normalize(cam, target_size=None):
+    result = []
+    for img in cam:
+        img = img - torch.min(img)
+        img = img / (1e-7 + torch.max(img))
+        if target_size is not None:
+            img = cv2.resize(img, target_size)
+        result.append(img.unsqueeze(0))
+    result = torch.cat(result, dim=0)
+
+    return result.cuda()
+
+
+
 def scale_accross_batch_and_channels(tensor, target_size):
     batch_size, channel_size = tensor.shape[:2]
     reshaped_tensor = tensor.reshape(

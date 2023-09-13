@@ -47,7 +47,7 @@ def cfg():
     checkpoints_dir = './checkpoints'
     snapshot_dir = ''
     epoch_count = 1
-    batchsize = 1
+    batchsize = 24
     infer_epoch_freq = 50
     save_epoch_freq = 50
     lr = 0.0003
@@ -152,20 +152,16 @@ def main(_run, _config, _log):
     cam_save_path = 'visualization/grad_cam_deep_feature_MR_2'
     isExists=os.path.exists(cam_save_path)
     if not isExists:
-        os.mkdir(cam_save_path) 
+        os.makedirs(cam_save_path) 
 
     for epoch in range(opt.epoch_count):
         for i, train_batch in enumerate(train_loader):
             img = train_batch['img'].cuda()
             lb = train_batch['lb'].cuda()
             targets = [SemanticSegmentationTarget(2, lb)]
-            epoch_start_time = time.time()
             grayscale_cam = cam(input_tensor=img, targets=targets) 
-            epoch_end_time = time.time()
-
-            print(epoch_end_time - epoch_start_time)
-            grayscale_cam = grayscale_cam[0,:]
-            img_float_np = np.float32(to01(img[0,0:1,...]).permute((1, 2, 0)).cpu().numpy())/255
+            grayscale_cam = np.float32(np.greater(grayscale_cam[20,:], 0.5))
+            img_float_np = np.float32(to01(img[20,0:1,...]).permute((1, 2, 0)).cpu().numpy())/255
             cam_image = show_cam_on_image(img_float_np, grayscale_cam, use_rgb=False)
             cv2.imwrite(os.path.join(cam_save_path, train_batch['scan_id'][0] + '_' + str(train_batch['z_id'][0].numpy()) + '.png'), cam_image)
 

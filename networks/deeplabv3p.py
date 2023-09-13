@@ -32,12 +32,12 @@ class DeepLabv3p(nn.Module):
 
     def forward(self, data):
         blocks = self.backbone(data)
-        v3plus_feature = self.head(blocks)
+        v3plus_feature, f = self.head(blocks)
         b, c, h, w = v3plus_feature.shape
         pred = self.classifier(v3plus_feature)
         b, c, h, w = data.shape
         pred = F.interpolate(pred, size=(h, w), mode='bilinear', align_corners=True)
-        return pred
+        return pred, f
 
    
     def _nostride_dilate(self, m, dilate):
@@ -137,6 +137,7 @@ class Head(nn.Module):
 
     def forward(self, f_list):
         f = f_list[-1]
+        df = f
         f = self.aspp(f)
 
         low_level_features = f_list[0]
@@ -147,7 +148,7 @@ class Head(nn.Module):
         f = torch.cat((f, low_level_features), dim=1)
         f = self.last_conv(f)
 
-        return f
+        return f, df
 
 def __init_weight(feature, conv_init, norm_layer, bn_eps, bn_momentum,
                   **kwargs):

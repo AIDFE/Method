@@ -1,4 +1,5 @@
 class ActivationsAndGradients:
+    # ActivationsAndGradients类主要的功能是通过钩子函数获取正向传播的特征层和反向传播的梯度图
     """ Class for extracting activations and
     registering gradients from targetted intermediate layers """
 
@@ -39,7 +40,8 @@ class ActivationsAndGradients:
     def __call__(self, x):
         self.gradients = []
         self.activations = []
-        return self.model(x)
+        out, f = self.model(x)
+        return out
 
     def release(self):
         for handle in self.handles:

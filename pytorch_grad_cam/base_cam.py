@@ -12,7 +12,7 @@ class BaseCAM:
     def __init__(self,
                  model: torch.nn.Module,
                  target_layers: List[torch.nn.Module],
-                 use_cuda: bool = False,
+                 use_cuda: bool = True,
                  reshape_transform: Callable = None,
                  compute_input_gradient: bool = False,
                  uses_gradients: bool = True) -> None:
@@ -50,13 +50,13 @@ class BaseCAM:
         weights = self.get_cam_weights(input_tensor,
                                        target_layer,
                                        targets,
-                                       activations,
-                                       grads)
-        weighted_activations = weights[:, :, None, None] * activations
+                                       activations, # feature map [B, C, H, W]
+                                       grads) # GAP [B,C,1]
+        weighted_activations = weights[:, :, None, None] * activations 
         if eigen_smooth:
             cam = get_2d_projection(weighted_activations)
         else:
-            cam = weighted_activations.sum(axis=1)
+            cam = weighted_activations.sum(axis=1) # [B, H, W]
         return cam
 
     def forward(self,
@@ -71,7 +71,7 @@ class BaseCAM:
             input_tensor = torch.autograd.Variable(input_tensor,
                                                    requires_grad=True)
 
-        outputs = self.activations_and_grads(input_tensor)
+        outputs = self.activations_and_grads(input_tensor) # 预测结果 [24, 5, 192, 192]
         if targets is None:
             target_categories = np.argmax(outputs.cpu().data.numpy(), axis=-1)
             targets = [ClassifierOutputTarget(
@@ -79,8 +79,7 @@ class BaseCAM:
 
         if self.uses_gradients:
             self.model.zero_grad()
-            loss = sum([target(output)
-                       for target, output in zip(targets, outputs)])
+            loss = targets[0](outputs)
             loss.backward(retain_graph=True)
 
         # In most of the saliency attribution papers, the saliency is
@@ -95,7 +94,7 @@ class BaseCAM:
         cam_per_layer = self.compute_cam_per_layer(input_tensor,
                                                    targets,
                                                    eigen_smooth)
-        return self.aggregate_multi_layers(cam_per_layer)
+        return cam_per_layer
 
     def get_target_width_height(self,
                                 input_tensor: torch.Tensor) -> Tuple[int, int]:
@@ -107,10 +106,16 @@ class BaseCAM:
             input_tensor: torch.Tensor,
             targets: List[torch.nn.Module],
             eigen_smooth: bool) -> np.ndarray:
-        activations_list = [a.cpu().data.numpy()
+        # activations_list = [a.cpu().data.numpy()
+        #                     for a in self.activations_and_grads.activations]
+        # grads_list = [g.cpu().data.numpy()
+        #               for g in self.activations_and_grads.gradients]
+
+        activations_list = [a
                             for a in self.activations_and_grads.activations]
-        grads_list = [g.cpu().data.numpy()
+        grads_list = [g
                       for g in self.activations_and_grads.gradients]
+                      
         target_size = self.get_target_width_height(input_tensor)
 
         cam_per_target_layer = []
@@ -124,17 +129,18 @@ class BaseCAM:
             if i < len(grads_list):
                 layer_grads = grads_list[i]
 
-            cam = self.get_cam_image(input_tensor,
-                                     target_layer,
-                                     targets,
-                                     layer_activations,
-                                     layer_grads,
-                                     eigen_smooth)
-            cam = np.maximum(cam, 0)
-            scaled = scale_cam_image(cam, target_size)
-            cam_per_target_layer.append(scaled[:, None, :])
+            cam = layer_grads
+            # cam = self.get_cam_image(input_tensor,
+            #                          target_layer,
+            #                          targets,
+            #                          layer_activations,
+            #                          layer_grads,
+            #                          eigen_smooth) # [B, 2048, 12, 12]
+            # cam = np.maximum(cam, 0) # ReLu X 与 Y 逐位比较取其大者
+            # cam = scale_cam_image(cam, target_size) # 归一化 + resize
+            # cam_per_target_layer.append(scaled[:, None, :])
 
-        return cam_per_target_layer
+        return cam
 
     def aggregate_multi_layers(
             self,
@@ -142,6 +148,7 @@ class BaseCAM:
         cam_per_target_layer = np.concatenate(cam_per_target_layer, axis=1)
         cam_per_target_layer = np.maximum(cam_per_target_layer, 0)
         result = np.mean(cam_per_target_layer, axis=1)
+
         return scale_cam_image(result)
 
     def forward_augmentation_smoothing(self,
