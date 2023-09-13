@@ -1,0 +1,10 @@
+checkpoints/
+dataloaders/.DS_Store
+tools/__pycache__/
+dataloaders/__pycache__/
+pretrain_model
+masks/__pycache__/
+networks/__pycache__/
+visualization/
+
+
